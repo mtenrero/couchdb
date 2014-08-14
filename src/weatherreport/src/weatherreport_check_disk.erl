@@ -48,7 +48,7 @@
 
 -export([description/0,
          valid/0,
-         check/0,
+         check/1,
          format/1]).
 
 -spec description() -> string().
@@ -59,8 +59,8 @@ description() ->
 valid() ->
     true.
 
--spec check() -> [{atom(), term()}].
-check() ->
+-spec check(list()) -> [{atom(), term()}].
+check(_Opts) ->
     DataDirs = weatherreport_config:data_directories(),
     %% Add additional disk checks in the function below
     lists:flatmap(fun(Dir) ->
@@ -157,8 +157,8 @@ check_is_file_readable(Directory) ->
 %% Check if the directory is mounted with 'noatime'
 check_atime(Directory) ->
     File = filename:join([Directory, ?TEST_FILE]),
+    weatherreport_util:run_command("touch -at 201401010000.00 " ++ File),
     {ok, FileInfo1} = file:read_file_info(File),
-    timer:sleep(1001),
     {ok, S} = file:open(File, [read]),
     io:get_line(S, ''),
     file:close(S),
