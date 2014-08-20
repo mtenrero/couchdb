@@ -61,7 +61,8 @@
                {expert, $e,       "expert", undefined,     "Perform more detailed diagnostics"               },
                {usage, $h,        "help",  undefined,      "Display help/usage"                              },
                {list,  $l,        "list",  undefined,      "Describe available diagnostic tasks"             },
-               {all_nodes, $a,    "all-nodes", undefined,  "Run weatherreport on all cluster nodes"          }
+               {all_nodes, $a,    "all-nodes", undefined,  "Run weatherreport on all cluster nodes"          },
+               {timeout, $t,      "timeout", integer,      "Timeout value (in ms) for each diagnostic check"              }
               ]).
 
 -define(USAGE_OPTS, [ O || O <- ?OPTS,
@@ -115,7 +116,6 @@ run(InputChecks) ->
             weatherreport_runner:run(Checks, all);
         _ ->
             weatherreport_runner:run(Checks)
-            
     end,
     case Messages of
     [] ->
@@ -162,6 +162,9 @@ process_option({etc,Path}, Result) ->
     Result;
 process_option({level, Level}, Result) ->
     application:set_env(weatherreport, log_level, Level),
+    Result;
+process_option({timeout, Timeout}, Result) ->
+    application:set_env(weatherreport, timeout, Timeout),
     Result;
 process_option(expert, Result) ->
     application:set_env(weatherreport, expert, true),
