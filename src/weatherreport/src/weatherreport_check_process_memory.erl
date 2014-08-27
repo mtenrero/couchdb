@@ -20,10 +20,10 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Diagnostic that checks for processes with large mailboxes
+%% @doc Diagnostic that checks for processes with high memory usage
 %% and sends a warning message if one or more processes exceed the
 %% threshold.
--module(weatherreport_check_message_queues).
+-module(weatherreport_check_process_memory).
 -behaviour(weatherreport_check).
 
 -export([description/0,
@@ -31,7 +31,7 @@
          check/1,
          format/1]).
 
--define(THRESHOLD, 1000).
+-define(THRESHOLD, 104857600).
 
 -spec description() -> string().
 description() ->
@@ -44,14 +44,14 @@ valid() ->
 -spec check(list()) -> [{atom(), term()}].
 check(Opts) ->
     weatherreport_util:check_proc_count(
-        message_queue_len,
+        memory,
         ?THRESHOLD,
         Opts).
 
 -spec format(term()) -> {io:format(), [term()]}.
-format({high, {Pid, MBoxSize, Info, Pinfo}}) ->
-    {"Process ~w has excessive mailbox size of ~w: ~w ~w", [Pid, MBoxSize, Info, Pinfo]};
-format({high, {Pid, MBoxSize, Info}}) ->
-    {"Process ~w has excessive mailbox size of ~w: ~w", [Pid, MBoxSize, Info]};
-format({ok, {Pid, MBoxSize, Info}}) ->
-    {"Process ~w has mailbox size of ~w: ~w", [Pid, MBoxSize, Info]}.
+format({high, {Pid, Memory, Info, Pinfo}}) ->
+    {"Process ~w has excessive memory usage of ~w: ~w ~w", [Pid, Memory, Info, Pinfo]};
+format({high, {Pid, Memory, Info}}) ->
+    {"Process ~w has excessive memory usage of ~w: ~w", [Pid, Memory, Info]};
+format({ok, {Pid, Memory, Info}}) ->
+    {"Process ~w has memory usage of ~w: ~w", [Pid, Memory, Info]}.
