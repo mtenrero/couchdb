@@ -122,6 +122,23 @@ handle_node_req(#httpd{method='GET', path_parts=[_, Node, <<"_system">>]}=Req) -
     send_json(Req, EJSON);
 handle_node_req(#httpd{path_parts=[_, _Node, <<"_system">>]}=Req) ->
     send_method_not_allowed(Req, "GET");
+
+% GET /_node/$node/metrics
+handle_node_req(#httpd{method='GET', path_parts=[_, Node, <<"metrics">>]}=Req) ->
+    Stats = call_node(Node, chttpd_node, get_stats, []),
+    EJSON = couch_stats_httpd:to_ejson(Stats),
+    Headers = [{<<"Content-Type">>, <<"text/plain">>}],
+    CouchDB = get_couchdb_stats(),
+    %System = couch_stats_httpd:to_ejson(get_system_stats()),
+    Body = to_bin(lists:map(fun(Line) ->
+        io_lib:format("~s~n", [Line])
+    end, CouchDB)),
+    {ok, Resp} = chttpd:start_response_length(Req, 200, Headers, size(Body)),
+    chttpd:send(Resp, Body);
+handle_node_req(#httpd{path_parts=[_, _Node, <<"metrics">>]}=Req) ->
+    send_method_not_allowed(Req, "GET");
+
+
 % POST /_node/$node/_restart
 handle_node_req(#httpd{method='POST', path_parts=[_, Node, <<"_restart">>]}=Req) ->
     call_node(Node, init, restart, []),
@@ -298,3 +315,88 @@ run_queues() ->
             [DCQ | SQs] = lists:reverse(statistics(run_queue_lengths)),
             {lists:sum(SQs), DCQ}
     end.
+
+json_to_prom(SystemJson) ->
+    SystemMap  = jiffy:decode(SystemJson, [return_maps]),
+    SystemList = maps:to_list(SystemMap),
+    ListA = lists:map(fun({Key, Value}) ->
+        couch_to_prom(<<"couchdb">>, Key, Value)
+                      end, SystemList),
+    lists:flatten(ListA).
+
+couch_to_prom(Prefix, Key, Value) when is_map(Value) ->
+    case maps:is_key(<<"value">>, Value) of
+        false ->
+            ValueList = maps:to_list(Value),
+            Prefix1 =  list_to_binary(binary_to_list(Prefix) ++ "_" ++ binary_to_list(Key)),
+            lists:foldl(fun({K, V}, Results0) ->
+                NewResult = couch_to_prom(Prefix1, K, V),
+                [NewResult | Results0]
+                        end, [], ValueList);
+        true ->
+            MV = maps:get(<<"value">>, Value),
+            MD = maps:get(<<"desc">>, Value),
+            Type = maps:get(<<"type">>, Value),
+            to_prom(Prefix, Key, Type, MV)
+    end;
+couch_to_prom(Prefix, Key, Value) ->
+    to_prom(Prefix, Key, Value).
+
+to_prom(Prefix, Metric, Value) ->
+    to_prom_list(Prefix, Metric, Value).
+
+to_prom(Prefix, Metric, <<"counter">>, Value) ->
+    to_prom_list(Prefix, Metric, Value);
+to_prom(Prefix, Metric, <<"gauge">>, Value) ->
+    to_prom_list(Prefix, Metric, Value);
+to_prom(Prefix, Metric, <<"histogram">>, Value) when is_map(Value)  ->
+    maps:fold(fun (K, V, Acc) ->
+        case K of
+            <<"percentile">> ->
+                PN = ?l2b(?b2l(Metric)  ++ "_percentile"),
+                Quantiles = lists:map(fun([Perc, Val]) ->
+                    case Perc of
+                        50 -> to_prom_list(Prefix, PN, [{quantile, <<"0.5">>}], Val);
+                        75 -> to_prom_list(Prefix, PN, [{quantile, <<"0.75">>}], Val);
+                        90 -> to_prom_list(Prefix, PN, [{quantile, <<"0.9">>}], Val);
+                        95 -> to_prom_list(Prefix, PN, [{quantile, <<"0.95">>}], Val);
+                        99 -> to_prom_list(Prefix, PN, [{quantile, <<"0.99">>}], Val);
+                        999 -> to_prom_list(Prefix, PN, [{quantile, <<"0.999">>}], Val)
+                    end
+                                      end, V),
+                [Quantiles, Acc];
+            _ ->
+                [to_prom_list(Prefix, ?l2b(?b2l(Metric) ++ "_" ++ K), V), Acc]
+        end
+              end, [], Value).
+
+
+to_prom_list(Prefix, Metric, Value) ->
+    [to_bin(io_lib:format("~s ~p", [to_prom_name(Prefix, Metric), Value]))].
+
+to_prom_list(Prefix, Metric, Label, Value) ->
+    [to_bin(io_lib:format("~s ~p", [to_prom_name(Prefix, Metric, Label), Value]))].
+
+to_prom_name(Prefix, Metric) ->
+    to_bin(io_lib:format("~s_~s", [Prefix, Metric])).
+
+to_prom_name(Prefix, Metric, Labels) ->
+    LabelParts = lists:map(fun({K, V}) ->
+        lists:flatten(io_lib:format("~s=\"~s\"", [to_bin(K), to_bin(V)]))
+                           end, Labels),
+    case length(LabelParts) > 0 of
+        true ->
+            LabelStr = string:join(LabelParts, ", "),
+            to_bin(io_lib:format("~s_~s{~s}", [Prefix, Metric, LabelStr]));
+        false ->
+            to_bin(io_lib:format("~s_~s", [Prefix, Metric]))
+    end.
+
+to_bin(Data) when is_list(Data) ->
+    iolist_to_binary(Data);
+to_bin(Data) when is_atom(Data) ->
+    atom_to_binary(Data, utf8);
+to_bin(Data) when is_integer(Data) ->
+    integer_to_binary(Data);
+to_bin(Data) when is_binary(Data) ->
+    Data.
