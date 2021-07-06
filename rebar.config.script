@@ -138,7 +138,8 @@ SubDirs = [
 
 DepDescs = [
 %% Independent Apps
-{config,           "config",           {tag, "2.1.9"}},
+{config,             {url, "https://github.com/mtenrero/couchdb-config"},
+                   {tag, "2.1.7.1"}, [raw]},
 {b64url,           "b64url",           {tag, "1.0.2"}},
 {erlfdb,           "erlfdb",           {tag, "v1.3.4"}},
 {ets_lru,          "ets-lru",          {tag, "1.1.0"}},
