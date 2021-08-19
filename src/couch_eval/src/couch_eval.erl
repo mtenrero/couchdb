@@ -17,7 +17,10 @@
     release_map_context/1,
     map_docs/2,
     with_context/2,
-    try_compile/4
+    try_compile/4,
+    validate_doc_update/5,
+    filter_view/3,
+    filter_docs/5
 ]).
 
 -include_lib("couch/include/couch_db.hrl").
@@ -37,6 +40,9 @@
 -type function_name() :: binary().
 -type function_src() :: binary().
 -type error(_Error) :: no_return().
+-type user_context() :: any().
+-type req() :: any().
+-type db() :: any().
 
 -type context_opts() :: #{
     db_name := db_name(),
@@ -58,6 +64,10 @@
 -callback acquire_context() -> {ok, any()} | {error, any()}.
 -callback release_context(context()) -> ok | {error, any()}.
 -callback try_compile(context(), function_type(), function_name(), function_src()) -> ok.
+-callback validate_doc_update(ddoc(), doc(), doc(), user_context(), sec_obj()) ->
+    ok | {error, any()}.
+-callback filter_view(ddoc(), function_name(), [doc()]) -> {true, [result()]} | {error, any()}.
+-callback filter_docs(req(), db(), ddoc(), function_name(), [doc()]) -> {true, [result()]} | {error, any()}.
 
 -spec acquire_map_context(
     db_name(),
@@ -115,6 +125,21 @@ try_compile({_ApiMod, _Ctx}, reduce, <<_/binary>>, disabled) ->
     ok;
 try_compile({ApiMod, Ctx}, FuncType, FuncName, FuncSrc) ->
     ApiMod:try_compile(Ctx, FuncType, FuncName, FuncSrc).
+
+validate_doc_update(#doc{body = {Props}} = DDoc, EditDoc, DiskDoc, Ctx, SecObj) ->
+    Language = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
+    ApiMod = get_api_mod(Language),
+    ApiMod:validate_doc_update(DDoc, EditDoc, DiskDoc, Ctx, SecObj).
+
+filter_view(#doc{body = {Props}} = DDoc, VName, Docs) ->
+    Language = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
+    ApiMod = get_api_mod(Language),
+    ApiMod:filter_view(DDoc, VName, Docs).
+
+filter_docs(Req, Db, #doc{body = {Props}} = DDoc, FName, Docs) ->
+    Language = couch_util:get_value(<<"language">>, Props, <<"javascript">>),
+    ApiMod = get_api_mod(Language),
+    ApiMod:filter_docs(Req, Db, DDoc, FName, Docs).
 
 acquire_context(Language) ->
     ApiMod = get_api_mod(Language),

@@ -19,7 +19,10 @@
     map_docs/2,
     acquire_context/0,
     release_context/1,
-    try_compile/4
+    try_compile/4,
+    validate_doc_update/5,
+    filter_view/3,
+    filter_docs/5
 ]).
 
 -include_lib("couch/include/couch_db.hrl").
@@ -62,3 +65,12 @@ release_context(Proc) ->
 
 try_compile(Proc, FunctionType, FunName, FunSrc) ->
     couch_query_servers:try_compile(Proc, FunctionType, FunName, FunSrc).
+
+validate_doc_update(DDoc, EditDoc, DiskDoc, Ctx, SecObj) ->
+    couch_query_servers:validate_doc_update(DDoc, EditDoc, DiskDoc, Ctx, SecObj).
+
+filter_view(DDoc, VName, Docs) ->
+    couch_query_servers:filter_view(DDoc, VName, Docs).
+
+filter_docs(Req, Db, DDoc, FName, Docs) ->
+    couch_query_servers:filter_docs(Req, Db, DDoc, FName, Docs).
